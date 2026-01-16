@@ -237,3 +237,20 @@ class Database:
         self._ensure_client()
         with self.lock:
             self.supabase.table("news_sources").update({"last_scanned": datetime.now().isoformat()}).eq("id", source_id).execute()
+    
+    def get_all_categories_summary(self) -> Dict:
+        """Get summary of projects by category"""
+        self._ensure_client()
+        try:
+            response = self.supabase.table("projects").select("category").execute()
+            
+            # Count projects per category
+            category_counts = {}
+            for row in response.data:
+                cat = row.get('category', 'other')
+                category_counts[cat] = category_counts.get(cat, 0) + 1
+            
+            return category_counts
+        except Exception as e:
+            print(f"Error getting categories summary: {e}")
+            return {}
