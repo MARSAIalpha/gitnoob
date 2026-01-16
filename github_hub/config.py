@@ -121,35 +121,15 @@ CATEGORIES = {
 }
 
 import os
-import shutil
 
 # ============================================================
-# 数据库配置
+# Supabase 配置
 # ============================================================
-if os.environ.get('VERCEL'):
-    # Vercel Runtime: Use /tmp for writable SQLite
-    DB_SOURCE = os.path.join(os.getcwd(), 'github_hub', 'data', 'projects.db')
-    # If not found in primary location, try alternative structure (depending on deployment layout)
-    if not os.path.exists(DB_SOURCE):
-         DB_SOURCE = os.path.join(os.getcwd(), 'data', 'projects.db')
-         
-    DATABASE_PATH = "/tmp/projects.db"
-    
-    # Copy bundled DB to /tmp if not already there
-    if not os.path.exists(DATABASE_PATH):
-        try:
-            if os.path.exists(DB_SOURCE):
-                print(f"Copying DB from {DB_SOURCE} to {DATABASE_PATH}")
-                shutil.copy2(DB_SOURCE, DATABASE_PATH)
-            else:
-                print(f"Warning: Source DB not found at {DB_SOURCE}, initializing empty.")
-        except Exception as e:
-            print(f"Error copying DB: {e}")
-            
-    print(f"Running on Vercel, using DB path: {DATABASE_PATH}")
-else:
-    # Local Development
-    DATABASE_PATH = "data/projects.db"
+SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://tsfbmpgemkgpzplcnizw.supabase.co')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzZmJtcGdlbWtncHpwbGNuaXp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NjE4NDksImV4cCI6MjA4NDEzNzg0OX0.hYXdCBKKxuFXbFuaHKT9mtqBlPKQpGqZsGLVRxLgwSc')
+
+# Legacy SQLite path (for migration script only)
+DATABASE_PATH = "data/projects.db"
 
 # ============================================================
 # 扫描配置
