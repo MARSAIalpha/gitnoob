@@ -8,7 +8,11 @@ class AnalyzerAgent:
     """AI 分析 Agent - 使用本地 LM Studio 模型"""
     
     def __init__(self):
-        self.client = OpenAI(base_url=LM_STUDIO_BASE, api_key=LM_STUDIO_KEY)
+        try:
+            self.client = OpenAI(base_url=LM_STUDIO_BASE, api_key=LM_STUDIO_KEY)
+        except Exception as e:
+            print(f"Warning: Could not initialize OpenAI client: {e}")
+            self.client = None
     
     def analyze_project(self, project: Dict, readme: Optional[str] = None) -> Dict:
         """分析单个项目，生成 Metadata"""
@@ -42,6 +46,8 @@ Topics: {', '.join(project.get('topics', []))}
 只返回 JSON，不要添加其他文字。"""
 
         try:
+            if not self.client:
+                return self._default_analysis(project)
             response = self.client.chat.completions.create(
                 model=MODELS["classifier"],  # 使用快速模型
                 messages=[{"role": "user", "content": prompt}],
@@ -255,7 +261,11 @@ class ContentAgent:
     """内容生成 Agent - 生成教程和文档"""
     
     def __init__(self):
-        self.client = OpenAI(base_url=LM_STUDIO_BASE, api_key=LM_STUDIO_KEY)
+        try:
+            self.client = OpenAI(base_url=LM_STUDIO_BASE, api_key=LM_STUDIO_KEY)
+        except Exception as e:
+            print(f"Warning: Could not initialize ContentAgent OpenAI client: {e}")
+            self.client = None
     
     
     def generate_tutorial(self, project: Dict, readme: Optional[str] = None, visual_summary: str = "") -> str:
