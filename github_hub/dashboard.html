@@ -1349,9 +1349,9 @@
             const statusRes = await fetch(`${API}/api/status`);
             const status = await statusRes.json();
             if (status.categories) {
-                Object.entries(status.categories).forEach(([cat, data]) => {
+                Object.entries(status.categories).forEach(([cat, count]) => {
                     const el = document.getElementById(`count-${cat}`);
-                    if (el) el.textContent = data.count || 0;
+                    if (el) el.textContent = count || 0;
                 });
             }
         }
@@ -1452,7 +1452,7 @@
                             ${p.language || 'Unknown'}
                         </span>
                         <span>🍴 ${formatNumber(p.forks)}</span>
-                        <span>📅 ${new Date(p.created_at).getFullYear()}</span>
+                        <a href="${p.url}" target="_blank" onclick="event.stopPropagation()" style="color:#58a6ff; text-decoration:none; display:flex; align-items:center; gap:4px" title="Open on GitHub">🔗 GitHub</a>
                     </div>
 
                      ${p.ai_rag_summary && !isRemote ? `
