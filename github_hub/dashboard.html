@@ -62,6 +62,20 @@
             background: var(--text-secondary);
         }
 
+        /* Read-Only Mode (Vercel) */
+        body.read-only-mode .btn-secondary[onclick*="analyzeProject"],
+        body.read-only-mode .btn-primary[onclick*="saveProject"],
+        body.read-only-mode .delete-btn,
+        body.read-only-mode .agent-btn,
+        body.read-only-mode #add-source-btn,
+        body.read-only-mode #refresh-btn {
+            display: none !important;
+        }
+
+        body.read-only-mode #agent-window .agent-toolbar {
+            display: none !important;
+        }
+
         /* Header */
         .header {
             height: 64px;
@@ -1005,6 +1019,13 @@
 
     <script>
         const API = '';  // Use relative path for Vercel deployment
+        const isReadOnly = !['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+        if (isReadOnly) {
+            document.body.classList.add('read-only-mode');
+            console.log("Running in Read-Only mode on Vercel.");
+        }
+
         let currentCategory = null;
 
         // --- Conversational Search & Hybrid Logic ---

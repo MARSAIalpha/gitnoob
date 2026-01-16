@@ -1,5 +1,6 @@
 # GitHub Hub - Master Agent (任务调度)
 import threading
+import traceback
 import time
 from datetime import datetime
 from typing import Dict, Callable
@@ -201,7 +202,7 @@ class MasterAgent:
             self._notify(f"Archive error: {e}", "error")
 
     def run_batch_analysis(self) -> Dict:
-        """批量分析所有未分析的项目 (使用快速模型)"""
+        """批量分析所有未分析的项目 (使用 120B 大模型)"""
         if self.is_running:
             return {"error": "Task already running"}
             
@@ -209,86 +210,68 @@ class MasterAgent:
         self.current_task = "batch_analysis"
         
         try:
-            # 获取所有项目（可以稍微优化只获取未分析的，但为了演示效果，我们可以遍历所有没有 tutorial 的）
-            # 或者只获取前 50 个未分析的
-            pending = self.db.get_projects_needing_analysis(limit=100) # Increased limit
+            # 获取需要分析的项目 (缺 120B 结果的)
+            pending = self.db.get_projects_needing_analysis(limit=100)
             
-            self._notify(f"Starting batch analysis for {len(pending)} projects using Deepseek 8B...", "info")
+            self._notify(f"Starting batch analysis for {len(pending)} projects using High-Quality Model...", "info")
             self.progress = {"total": len(pending), "done": 0, "current": "Batch Analysis"}
             
             analyzed_count = 0
             total = len(pending)
             
             for idx, project in enumerate(pending, 1):
-                if not self.is_running: break # Allow cancellation (not implemented yet but good practice)
+                if not self.is_running: break
                 
                 progress_tag = f"[{idx}/{total}]"
-                self.progress["current"] = f"Generating Tutorial: {project['name']}"
+                self.progress["current"] = f"Analyzing: {project['name']}"
                 self._notify(f"{progress_tag} 正在分析 {project['name']}...", "info")
                 
-                # 始终获取 README (教程生成需要)
+                # 始终获取 README (分析需要)
                 readme = self.crawler.get_readme(project['full_name'])
                 
-                # 1. 生成/更新 Analysis (如果缺失)
-                if not project.get('ai_summary'):
-                    analysis = self.analyzer.analyze_project(project, readme)
-                    self.db.update_ai_analysis(project['id'], analysis)
-                else:
-                    analysis = {"summary": project.get('ai_summary')}
+                # 1. 生成 AI Analysis (如果不是 120B 生成的或还没生成)
+                is_120b = project.get('ai_model_name') and '120b' in project['ai_model_name'].lower()
                 
-                if not project.get('ai_summary'):
+                if not is_120b:
                     analysis = self.analyzer.analyze_project(project, readme)
-                    self.db.update_ai_analysis(project['id'], analysis)
+                    self.db.update_project_analysis(project['id'], analysis)
                 else:
                     analysis = {"summary": project.get('ai_summary')}
                 
                 # 1.1 生成 RAG Summary (如果缺失)
-                if not project.get('ai_rag_summary'):
+                if not project.get('ai_rag_summary') or not is_120b:
                     rag_summary = self.analyzer.generate_rag_summary(project, readme)
                     if rag_summary:
-                        with self.db.lock:
-                            self.db.conn.execute("UPDATE projects SET ai_rag_summary = ? WHERE id = ?", (rag_summary, project['id']))
-                            self.db.conn.commit()
+                        self.db.update_project_rag_summary(project['id'], rag_summary)
                 
-                # 2. 抓取截图 (如果缺失 或 强制更新)
+                # 2. 抓取截图 (如果缺失)
                 screenshot_path = project.get('screenshot')
                 if not screenshot_path:
                     self._notify(f"{progress_tag} 正在截图 {project['name']}...", "info")
                     screenshot_path = self.crawler.capture_screenshot(project['url'], project['id'])
                     if screenshot_path:
-                        self.db.update_screenshot(project['id'], screenshot_path)
+                        self.db.update_project_screenshot(project['id'], screenshot_path)
                 
                 # 3. 视觉分析 (OCR & UI)
                 visual_summary = ""
                 if screenshot_path:
                     self._notify(f"{progress_tag} 视觉分析 (OCR) {project['name']}...", "info")
                     visual_summary = self.analyzer.analyze_with_vision(project, screenshot_path)
-                    # Update DB with visual summary (need update method, handled in update_ai_analysis context or separate)
-                    # Actually update_ai_analysis handles it if we pass it, but here we might want to attach it to 'analysis' dict
-                    # Let's trust generate_tutorial uses it, and we save it too.
-                    # We updated update_ai_analysis to take visual_summary key
-                    if not analysis.get('visual_summary'):
-                        analysis['visual_summary'] = visual_summary
-                        self.db.update_ai_analysis(project['id'], analysis)
+                    # 视觉摘要也需要更新
+                    self.db.update_project_visual_summary(project['id'], visual_summary)
 
-                # 4. 生成教程 (使用强力模型 + 视觉信息)
-                self._notify(f"{progress_tag} 生成深度教程 (80B)...", "info")
-                # Need to update generate_tutorial signature in master logic or calling
-                # master.generate_tutorial calls self.content.generate_tutorial
-                # Let's call content agent directly or update master.generate_tutorial signature?
-                # Let's update master's generate_tutorial to accept visual_summary
+                # 4. 生成深度教程
+                self._notify(f"{progress_tag} 生成深度教程...", "info")
                 tutorial = self.content.generate_tutorial(project, readme, visual_summary)
                 
                 # Update DB
-                with self.db.lock:
-                    self.db.conn.execute("UPDATE projects SET ai_tutorial = ? WHERE id = ?", (tutorial, project['id']))
-                    self.db.conn.commit()
+                self.db.update_project_tutorial(project['id'], tutorial)
                 
                 analyzed_count += 1
                 self.progress["done"] += 1
-                self._notify(f"{progress_tag} ✅ {project['name']} 教程生成完成", "success")
+                self._notify(f"{progress_tag} ✅ {project['name']} 处理完成", "success")
                 
-                # 稍微延时
+                # 稍微延时避免请求过快
                 time.sleep(1)
             
             self._notify(f"🎉 批量分析完成！共处理 {analyzed_count} 个项目", "success")
@@ -296,6 +279,8 @@ class MasterAgent:
             
         except Exception as e:
             self._notify(f"Batch analysis error: {e}", "error")
+            print(f"Batch Error: {e}")
+            traceback.print_exc()
             return {"error": str(e)}
         finally:
             self.is_running = False

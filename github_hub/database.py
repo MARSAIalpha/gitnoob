@@ -95,6 +95,10 @@ class Database:
         
         with self.lock:
             self.supabase.table("projects").update(update_data).eq("id", str(project_id)).execute()
+            
+    def update_ai_analysis(self, project_id: str, analysis: dict):
+        """Alias for backward compatibility"""
+        self.update_project_analysis(project_id, analysis)
     
     def update_project_tutorial(self, project_id: str, tutorial: str):
         """Update tutorial content"""
@@ -120,11 +124,34 @@ class Database:
         with self.lock:
             self.supabase.table("projects").update({"ai_visual_summary": summary}).eq("id", str(project_id)).execute()
     
-    def get_unanalyzed_projects(self, limit: int = 10) -> List[Dict]:
-        """Get projects that haven't been analyzed"""
+    def get_projects_needing_analysis(self, limit: int = 10, target_model: str = "120b") -> List[Dict]:
+        """
+        Get projects that need analysis.
+        Prioritizes projects that have NO analysis or analysis from a different model.
+        """
         self._ensure_client()
+        
+        # 1. First, try to get completely unanalyzed projects
         response = self.supabase.table("projects").select("*").is_("ai_summary", "null").limit(limit).execute()
-        return [dict(row) for row in response.data]
+        pending = [dict(row) for row in response.data]
+        
+        # 2. If we still have room, get projects that haven't been analyzed by the target_model
+        if len(pending) < limit:
+            remaining = limit - len(pending)
+            # Use 'not ilike' if possible, or just fetch and filter locally for simplicity since limit is small
+            # Supabase doesn't have a direct 'not ilike' in the basic client wrapper sometimes, 
+            # let's just fetch projects that have a summary but NO model name, or model name != target_model
+            response = self.supabase.table("projects").select("*")\
+                .not_.is_("ai_summary", "null")\
+                .not_.ilike("ai_model_name", f"%{target_model}%")\
+                .limit(remaining).execute()
+            pending.extend([dict(row) for row in response.data])
+            
+        return pending
+        
+    def get_unanalyzed_projects(self, limit: int = 10) -> List[Dict]:
+        """Alias for backward compatibility"""
+        return self.get_projects_needing_analysis(limit=limit)
     
     def search_projects(self, query: str) -> List[Dict]:
         """Full-text search on projects"""
@@ -136,10 +163,20 @@ class Database:
         return [dict(row) for row in response.data]
     
     def get_pending_count(self) -> int:
-        """Get count of projects pending analysis"""
+        """Get count of projects pending analysis (lacking 120B analysis)"""
         self._ensure_client()
-        response = self.supabase.table("projects").select("id", count="exact").is_("ai_summary", "null").execute()
-        return response.count or 0
+        # Strictly count those without 120b analysis
+        try:
+            total_res = self.supabase.table("projects").select("id", count="exact").execute()
+            total = total_res.count or 0
+            
+            analyzed_res = self.supabase.table("projects").select("id", count="exact").ilike("ai_model_name", "%120b%").execute()
+            analyzed = analyzed_res.count or 0
+            
+            return max(0, total - analyzed)
+        except Exception as e:
+            print(f"Error getting pending count: {e}")
+            return 0
     
     def get_tutorial(self, project_id: str) -> Optional[str]:
         """Get tutorial for a project"""
