@@ -153,23 +153,42 @@ class Database:
         self._ensure_client()
         
         # Total projects
-        total_response = self.supabase.table("projects").select("id", count="exact").execute()
-        total = total_response.count or 0
-        
-        # Analyzed projects (Count only those analyzed by 120B model)
-        # We case-insensitive check for '120b' in ai_model_name
-        analyzed_response = self.supabase.table("projects").select("id", count="exact")\
-            .ilike("ai_model_name", "%120b%").execute()
-        analyzed = analyzed_response.count or 0
+        total = 0
+        try:
+            total_response = self.supabase.table("projects").select("id", count="exact").execute()
+            total = total_response.count if total_response.count is not None else 0
+        except Exception as e:
+            print(f"Error getting total count: {e}")
+            
+        # Analyzed projects
+        analyzed = 0
+        try:
+            # Try to count only those analyzed by 120B model
+            analyzed_response = self.supabase.table("projects").select("id", count="exact")\
+                .ilike("ai_model_name", "%120b%").execute()
+            analyzed = analyzed_response.count if analyzed_response.count is not None else 0
+        except Exception as e:
+            # Fallback: Count any project with an ai_summary
+            print(f"Error getting 120B count (probably column missing): {e}")
+            try:
+                analyzed_response = self.supabase.table("projects").select("id", count="exact").not_.is_("ai_summary", "null").execute()
+                analyzed = analyzed_response.count if analyzed_response.count is not None else 0
+            except Exception as e2:
+                print(f"Error getting basic analyzed count: {e2}")
         
         # Categories
-        categories_response = self.supabase.table("projects").select("category").execute()
-        categories = list(set(row['category'] for row in categories_response.data))
-        
+        cat_count = 0
+        try:
+            categories_response = self.supabase.table("projects").select("category").execute()
+            categories = list(set(row['category'] for row in categories_response.data))
+            cat_count = len(categories)
+        except Exception as e:
+            print(f"Error getting categories: {e}")
+            
         return {
             "total_projects": total,
             "analyzed_projects": analyzed,
-            "categories": len(categories)
+            "categories": cat_count
         }
     
     # ========== Scan History ==========
