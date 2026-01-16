@@ -12,11 +12,18 @@ class MasterAgent:
     """主控 Agent - 调度所有子任务"""
     
     def __init__(self, db_path: str = None):
+        from config import DATABASE_PATH
         if db_path is None:
             import os
-            # Get absolute path to the directory containing this file (github_hub)
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            db_path = os.path.join(base_dir, "data", "projects.db")
+            # Use the centralized DATABASE_PATH from config (handles Vercel /tmp logic)
+            resolved_db_path = DATABASE_PATH
+            
+            # If DATABASE_PATH is relative (local dev), make it absolute based on this file's location
+            if not os.path.isabs(DATABASE_PATH):
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+                resolved_db_path = os.path.join(base_dir, DATABASE_PATH)
+            
+            db_path = resolved_db_path
             
         self.db = Database(db_path)
         self.crawler = CrawlerAgent()
