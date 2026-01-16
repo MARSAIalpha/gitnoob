@@ -121,15 +121,34 @@ CATEGORIES = {
 }
 
 import os
+import shutil
 
 # ============================================================
 # 数据库配置
 # ============================================================
 if os.environ.get('VERCEL'):
+    # Vercel Runtime: Use /tmp for writable SQLite
+    DB_SOURCE = os.path.join(os.getcwd(), 'github_hub', 'data', 'projects.db')
+    # If not found in primary location, try alternative structure (depending on deployment layout)
+    if not os.path.exists(DB_SOURCE):
+         DB_SOURCE = os.path.join(os.getcwd(), 'data', 'projects.db')
+         
     DATABASE_PATH = "/tmp/projects.db"
-    # Create the directory if needed (though /tmp usually exists)
+    
+    # Copy bundled DB to /tmp if not already there
+    if not os.path.exists(DATABASE_PATH):
+        try:
+            if os.path.exists(DB_SOURCE):
+                print(f"Copying DB from {DB_SOURCE} to {DATABASE_PATH}")
+                shutil.copy2(DB_SOURCE, DATABASE_PATH)
+            else:
+                print(f"Warning: Source DB not found at {DB_SOURCE}, initializing empty.")
+        except Exception as e:
+            print(f"Error copying DB: {e}")
+            
     print(f"Running on Vercel, using DB path: {DATABASE_PATH}")
 else:
+    # Local Development
     DATABASE_PATH = "data/projects.db"
 
 # ============================================================
