@@ -8,7 +8,12 @@ from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from config import GITHUB_API, GITHUB_TOKEN, CATEGORIES, SCAN_CONFIG
 import os
-from playwright.sync_api import sync_playwright
+
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:
+    sync_playwright = None
+    print("Warning: Playwright not found. Screenshot features disabled.")
 
 class CrawlerAgent:
     """GitHub 爬虫 Agent - 负责获取项目信息、README 和截图"""
@@ -26,6 +31,10 @@ class CrawlerAgent:
 
     def capture_screenshot(self, url: str, project_id: str) -> Optional[str]:
         """抓取网页截图 (滚动到 README 区域)"""
+        if not sync_playwright:
+             print("[Crawler] Playwright not installed, skipping screenshot.")
+             return None
+             
         try:
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)

@@ -2,6 +2,5 @@ flask
 flask-cors
 requests
 beautifulsoup4
-playwright
 openai
 duckduckgo-search
